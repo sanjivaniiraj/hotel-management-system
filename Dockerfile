@@ -1,26 +1,27 @@
-# ==========================================
-# 1. BUILD REACT FRONTEND
-# ==========================================
+# ============================================
+# BUILD REACT FRONTEND
+# ============================================
 FROM node:20-alpine AS frontend-build
 
 WORKDIR /app/frontend
 
-# Copy package files
+# Copy package.json only
 COPY frontend/package.json ./
 
-# Install dependencies WITHOUT npm ci
+# Install dependencies
+# IMPORTANT: Do NOT use npm ci because there is no package-lock.json
 RUN npm install --no-audit --no-fund --package-lock=false
 
-# Copy frontend source
+# Copy all frontend files
 COPY frontend/ ./
 
-# Build React
+# Create production React build
 RUN npm run build
 
 
-# ==========================================
-# 2. BUILD SPRING BOOT BACKEND
-# ==========================================
+# ============================================
+# BUILD SPRING BOOT BACKEND
+# ============================================
 FROM maven:3.9.9-eclipse-temurin-17 AS backend-build
 
 WORKDIR /app
@@ -31,27 +32,27 @@ COPY backend/pom.xml ./backend/pom.xml
 # Download Maven dependencies
 RUN mvn -f backend/pom.xml dependency:go-offline -B
 
-# Copy backend source
+# Copy backend source code
 COPY backend/ ./backend/
 
-# Copy React production build into Spring Boot static folder
+# Copy React build into Spring Boot static resources
 COPY --from=frontend-build /app/frontend/dist/ ./backend/src/main/resources/static/
 
-# Build Spring Boot application
+# Build Spring Boot JAR
 RUN mvn -f backend/pom.xml clean package -DskipTests
 
 
-# ==========================================
-# 3. RUN APPLICATION
-# ==========================================
+# ============================================
+# PRODUCTION RUNTIME
+# ============================================
 FROM eclipse-temurin:17-jre-alpine
 
 WORKDIR /app
 
-# Copy generated Spring Boot JAR
+# Copy Spring Boot JAR
 COPY --from=backend-build /app/backend/target/*.jar app.jar
 
-# Railway provides PORT automatically
+# Railway provides the PORT environment variable
 EXPOSE 8080
 
 ENV PORT=8080
